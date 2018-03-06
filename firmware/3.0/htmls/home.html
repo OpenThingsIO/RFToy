@@ -1,0 +1,429 @@
+<html>
+<head>
+	<title>RFToy</title>
+  <meta name='viewport' content='width=device-width,initial-scale=1'>	
+	<link href="https://fonts.googleapis.com/css?family=Geo|Open Sans" rel="stylesheet">
+</head>
+<body>
+	<div style="max-width: 100%; margin: auto;">
+		<h1 id="title">RFToy</h1>
+		<div id="menu">
+			<div id="statusContainer">
+				<div id="statusIndicator"></div>
+				<div id="status">Connecting</div>
+			</div>
+			<div class="menuDropDownContainer">
+				<div id="menuIcon">
+					<div class="menuBar"></div><div class="menuBar"></div><div class="menuBar"></div>
+				</div>
+				<div id="menuDropDownContent" class="menuDropDownContentClass">
+					<div id="menuDropDownRS">Raw Sample</div>
+					<div id="menuDropDownUp">Firmware</div>
+					<!--<div>Setting</div>-->
+				</div>
+			</div>
+		</div>
+		
+		<div class="scrollable">
+			<script type="text/javascript">
+				function w(s){ document.write(s); }
+				for (let i = 1; i < 51; i++) {
+					w('<div style="margin-top:8px;">');
+					w('<div style="display:flex;">');
+						w('<button type="button" class="accordion underScoreBtn">');
+						w("Station "+i);
+						w('</button>');
+						w('<button class="playBtn underScoreBtn">Off</button>');
+					w('</div>');
+
+					w('<div class="panel">');
+						w('<div class="panelInfo code">');
+						w('Code: ');
+						w('</div>');
+						w('<button class="recordOnBtn underScoreBtn">Record On</button>');
+						w('<button class="changeNameBtn underScoreBtn">Set Name</button>');
+						w('<button class="recordOffBtn underScoreBtn">Record Off</button>');
+						w('</div>');
+					w('</div>');
+				}
+			</script>
+		</div>
+	</div>
+
+	<style type="text/css">
+		body{background-color: #eeeeee;}
+		#title{text-align: center;font-family: 'Geo';}
+		#status, .panelInfo, .underScoreBtn, .menuDropDownContentClass div{
+			font-family: 'Open Sans';
+			font-size: 1.0rem;
+		}
+		#menu{
+			margin: 1.0rem 1.0rem;
+		}
+		#statusContainer{
+			width: calc(100% - 1.5rem);
+			display: inline-block;
+		}
+		#status{
+			display: inline-block;
+			margin-left: 0.2rem;
+		}
+		#statusIndicator{
+			width: 0.5rem;
+			height: 0.5rem;
+			display: inline-block;
+			border-radius: 50%;
+			background-color: #f2f2f2;
+			padding: none;
+			border: 1px solid white;
+			border-top: 1px solid #8c8c8c;
+			animation: spin 2s linear infinite;
+		}
+		@keyframes spin {
+		  0% { transform: rotate(0deg); }
+		  100% { transform: rotate(360deg); }
+		}
+		.menuDropDownContainer{
+			display: inline-block;
+			position: relative;
+		}
+		#menuIcon{
+			width: 1rem;
+			display: inline-block;
+		}
+		.menuBar{
+			margin: 0.15rem 0;
+			width: 1.5rem;
+		    height: 0.15rem;
+		    background-color: black;
+		}
+		.menuDropDownContentClass{
+			display: none;
+			position: absolute;
+			background-color: #fff;
+			min-width: 10rem;
+			box-shadow: 0rem 0.5rem 1rem 0rem rgba(0,0,0,0.2);
+			right: 0;
+		}
+		.menuDropDownContentClass div{
+			display: block;
+			color: black;
+			padding: 1rem 1.5rem;
+			text-align: center;
+		}
+		.menuDropDownShow{
+			display: block;
+		}
+		.panelInfo{
+			padding: 8px;
+		}
+		.underScoreBtn{
+			border-style: solid;
+			border-width: 0px 0px 1px 0px;
+			border-color: #aaaaaa;
+			outline: none;
+			background-color: white;
+		}
+		.underScoreBtn:hover:enabled, .accordion.active:hover, .menuDropDownContentClass div:hover{
+			background-color: #ddd;
+		}
+		.scrollable{
+			overflow-y: scroll;
+			height: 500px;
+		}
+		.playBtn{
+			width: 23%;
+			padding: 10px;
+			margin: 0% 1%;
+		}
+		.accordion{
+			width: 73%;
+			padding: 10px;
+			margin: 0% 1%;
+			text-align: center;
+		}
+		button.accordion:before{
+			content: '\25B6'; /*The triangle at the front*/
+			color: #8c8c8c;
+			float: left;
+		}
+		button.accordion.active:before{
+			content: '\25BC';
+			float: left;
+		}
+		button.accordion.active{
+			background-color: #e6e6e6;
+		}
+		div.panel{
+			max-height: 0;
+			margin: 0% 3%;
+			overflow: hidden;
+			transition: max-height 0.2s ease-out, margin-bottom 0.2s ease-out;
+			padding: 0%;
+		}
+		.recordOnBtn, .recordOffBtn{
+			width: 31%;
+			margin: 0% 1%;
+			padding: 10px;
+			cursor: pointer;
+		}
+		.changeNameBtn{
+			width: 32%;
+			margin: 0% 1%;
+			padding: 10px;
+			cursor: pointer;
+		}
+	</style>
+
+<script type="text/javascript">
+	var ip="/";
+	function fail() {alert("Unable to reach controller.");}
+	function id(s) {return document.getElementById(s);}
+	function clas(s) {return document.getElementsByClassName(s);}
+	var MAX_TIMEOUT = 15000;
+	Connection = { Connected:"Connected", Disconnected:"Disconnected", Timeout:"Timeout", Connecting:"Connecting"}
+	var cur_connection = Connection.Connecting;
+	var errorUpdateRate = 30000; // updating the page content once every 30 sec
+	var connectedUpdateRate = 3000; // updating the page content once every sec
+	var updateInterval; // store the update interval id
+	
+	function setButtonState(b,t) {
+		b.innerHTML = t;
+		if(t==="On") {b.style.backgroundColor = '#aaffaa'; }
+		if(t==="Off") { b.style.backgroundColor = '#ffffff'; }
+	}
+	function getUpdate(){
+		if (cur_connection != Connection.Connected) {
+			changeStatus(Connection.Connecting);
+		}
+		let xhr = new XMLHttpRequest();
+		let url = ip+"jc";
+		xhr.open("GET", url, true);
+		xhr.timeout = MAX_TIMEOUT;
+		xhr.ontimeout = function(){
+			if (cur_connection == Connection.Connecting || cur_connection == Connection.connected) {
+				changeStatus(Connection.Timeout);
+			}
+		};
+		xhr.onreadystatechange = function(){
+			if (xhr.readyState === 4 && xhr.status === 200) {
+				changeStatus(Connection.Connected);
+				let acc = clas("accordion");
+				let pb = clas("playBtn");
+				let cd = clas("code");
+				let json = JSON.parse(xhr.responseText);
+				for (let i = 0; i < json.stations.length; i++) {
+					acc[i].innerHTML = json.stations[i].name;
+					if (json.stations[i].status==0) {
+						setButtonState(pb[i], "Off");
+					}else{
+						setButtonState(pb[i], "On");
+					}
+					cd[i].innerHTML = "Code: "+json.stations[i].code;
+				}
+			}else if(xhr.readyState === 4){
+				changeStatus(Connection.Disconnected);
+			}
+		};
+		xhr.send();
+	}
+
+	function changeStatus(c){
+		if (cur_connection != c) {
+			let s = id("status");
+			s.innerHTML = c;
+			let i = id("statusIndicator");
+			if (cur_connection == Connection.Connecting) {
+				i.style.border = "none";
+				i.style.animation = "none";
+			}
+			switch (c){
+				case Connection.Connecting:
+					i.style.backgroundColor = "#f2f2f2";
+					i.style.border = "1px solid white";
+					i.style.borderTop = "1px solid #8c8c8c";
+					i.style.animation = "spin 2s linear infinite";
+				break;
+				case Connection.Connected:
+					// fast update
+					if (!updateInterval) {
+						clearInterval(updateInterval);
+						updateInterval = setInterval(getUpdate, connectedUpdateRate);
+					}
+					i.style.backgroundColor = "#47d147";
+				break;
+				case Connection.Timeout:
+					// clear interval, set the update interval slower
+					if (updateInterval) {
+						clearInterval(updateInterval);
+						updateInterval = setInterval(getUpdate, errorUpdateRate);
+					}
+					i.style.backgroundColor = "#ffbb33";
+				break;
+				case Connection.Disconnected:
+					// clear interval, set the update interval slower
+					if (updateInterval) {
+						clearInterval(updateInterval);
+						updateInterval = setInterval(getUpdate, errorUpdateRate);
+					}
+					i.style.backgroundColor = "#ff4d4d";
+				break;
+			}
+
+		}
+		cur_connection = c;
+	}
+	
+	let menuicon = id("menuIcon");
+	menuicon.onclick = function(){
+		id("menuDropDownContent").classList.toggle("menuDropDownShow");
+	}
+
+	let rawSampling = id("menuDropDownRS");
+	rawSampling.onclick = function(){window.open('rs', '_top');}
+
+	let firmware = id("menuDropDownUp");
+	firmware.onclick = function() {window.open('update', '_top');}
+
+	let acc = clas("accordion");
+	for (let i = 0; i < acc.length; i++) {
+		acc[i].onclick = function(){
+			// highlight the button that controlls the panel
+			this.classList.toggle("active");
+
+			// get the panel this button control
+			let panel = this.parentNode.nextElementSibling;
+
+			// hide and show the panel
+			if (panel.style.maxHeight) {
+				panel.style.maxHeight = null;
+				panel.style.marginBottom = "0%";
+			}else{
+				panel.style.maxHeight = panel.scrollHeight + "px";
+				panel.style.marginBottom = "2%";
+			}
+		}
+	}
+
+	// Change name button
+	let ccn = clas("changeNameBtn");
+	for (let i = 0; i < ccn.length; i++) {
+		ccn[i].onclick = function(){
+			let btn = ccn[i].parentNode.previousSibling.firstChild;
+			let input = prompt("Enter the name for "+btn.innerHTML,
+				"Livingroom Light");
+			if (input != null) {
+				if (input.length > 20) {
+					alert("Name too long (maximum 20 characters).");
+				}else if(input.length < 1){
+					alert("Name too short.");
+				}else {
+					let xhr = new XMLHttpRequest();
+					let url = ip+"cc?sid="+i+"&name="+encodeURIComponent(input);
+					xhr.open("GET", url, true);
+					//xhr.timeout = MAX_TIMEOUT;
+					//xhr.ontimeout = timeoutProcedure;
+					xhr.onreadystatechange = function(){
+						if (xhr.readyState === 4) {
+							if (xhr.status === 200) {
+								btn.innerHTML = input;
+							}else{
+								fail();
+							}
+						}
+					};
+					xhr.send();
+				}
+			}
+		}
+
+		// record on signal button
+		let roBtn = ccn[i].previousSibling;
+		roBtn.onclick = function(){
+			this.disabled = true;
+			this.innerHTML = "Recording..";
+			let xhr = new XMLHttpRequest();
+			let url = ip+"cc?sid="+i+"&record=on";
+			xhr.open("GET", url, true);
+			//xhr.timeout = MAX_TIMEOUT;
+			//xhr.ontimeout = timeoutProcedure;
+			xhr.onreadystatechange = function(){
+				if (xhr.readyState === 4) {
+					if (xhr.status != 200) {
+						fail();
+					}
+				}
+				roBtn.innerHTML = "Record On Signal";
+				roBtn.disabled = false;
+
+			};
+			xhr.send();
+		}
+
+		// record off signal button
+		let rfBtn = ccn[i].nextElementSibling;
+		rfBtn.onclick = function(){
+			this.disabled = true;
+			this.innerHTML = "Recording..";
+			let xhr = new XMLHttpRequest();
+			let url = ip+"cc?sid="+i+"&record=off";
+			xhr.open("GET", url, true);
+			//xhr.timeout = MAX_TIMEOUT;
+			//xhr.ontimeout = timeoutProcedure;
+			xhr.onreadystatechange = function(){
+				if (xhr.readyState === 4) {
+					if (xhr.status != 200) {
+						fail();
+					}
+				}
+				rfBtn.innerHTML = "Record Off Signal";
+				rfBtn.disabled = false;
+			};
+			xhr.send();
+		}
+	}
+
+	// Turn on and off button
+	let pb = clas("playBtn");
+	for (let i = 0; i < pb.length; i++) {
+		pb[i].onclick = function(){
+			this.disabled = true;
+			let xhr = new XMLHttpRequest();
+			let url = ip+"cc?sid="+i+"&turn=";
+			if (this.innerHTML == "Off") {
+				this.innerHTML = "Turning On...";
+				url += "on";
+			}else{
+				this.innerHTML = "Turning Off...";
+				url += "off";
+			}
+			xhr.open("GET", url, true);
+			//xhr.timeout = MAX_TIMEOUT;
+			//xhr.ontimeout = timeoutProcedure;
+			xhr.onreadystatechange = function(){
+				if (xhr.readyState === 4) {
+					if (xhr.status === 200) {
+						if (pb[i].innerHTML == "Turning On...") {
+							setButtonState(pb[i], "On");
+						}else{
+							setButtonState(pb[i], "Off");
+						}
+					}else{
+						fail();
+						if (pb[i].innerHTML == "Turning On...") {
+							setButtonState(pb[i], "Off");
+						}else{
+							setButtonState(pb[i], "On");
+						}
+					}	
+				}
+				pb[i].disabled = false;
+			};
+			xhr.send();
+		}
+	}
+	getUpdate();
+	updateInterval = setInterval(getUpdate, connectedUpdateRate);
+</script>
+</body>
+</html>
