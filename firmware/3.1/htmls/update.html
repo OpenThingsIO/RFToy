@@ -1,0 +1,62 @@
+<head>
+  <title>RFToy</title>
+  <meta name='viewport' content='width=device-width, initial-scale=1'>
+  <link rel="stylesheet" href="http://code.jquery.com/mobile/1.4.5/jquery.mobile-1.4.5.min.css">
+  <link href="https://fonts.googleapis.com/css?family=Geo|Open Sans" rel="stylesheet">
+  <script src="http://code.jquery.com/jquery-1.11.1.min.js"></script>
+  <script src="http://code.jquery.com/mobile/1.4.5/jquery.mobile-1.4.5.min.js"></script>
+</head>
+<style type="text/css">
+* {font-family: 'Open Sans'; font-size: 1.0rem;}
+</style>
+<body>
+  <div data-role='page' id='page_update'>
+    <div data-role='header'><h3>RFToy Firmware Update</h3></div>
+    <div data-role='content'>
+      <form method='POST' action='/update' id='fm' enctype='multipart/form-data'>
+      <table cellspacing=4>
+      <tr><td><b>Select firmware file (.bin)</b></td></tr>
+      <tr><td><input type='file' name='file' accept='.bin' id='file'></td></tr>
+      <tr><td><label id='msg'></label></td></tr>
+      </table>
+      <a href='#' data-role='button' data-inline='true' data-theme='a' id='btn_back'>Back</a>
+      <a href='#' data-role='button' data-inline='true' data-theme='b' id='btn_submit'>Upload</a>
+      </form>
+    </div>
+  </div>
+  <script>
+  function id(s) {return document.getElementById(s);}
+  function clear_msg() {id('msg').innerHTML='';}
+  function show_msg(s,t,c) {
+    id('msg').innerHTML=s.fontcolor(c);
+    if(t>0) setTimeout(clear_msg, t);
+  }
+  function goback() {history.back();}
+  $('#btn_back').click(function(e){
+    e.preventDefault(); goback();
+  });
+  $('#btn_submit').click(function(e){
+    var files= id('file').files;
+    if(files.length==0) {show_msg('Please select a file.',2000,'red'); return;}
+    var btn = id('btn_submit');
+    show_msg('Uploading. Please wait...',0,'green');
+    var fd = new FormData();
+    var file = files[0];
+    fd.append('file', file, file.name);
+    var xhr = new XMLHttpRequest();
+    xhr.onreadystatechange = function() {
+      if(xhr.readyState==4 && xhr.status==200) {
+        var jd=JSON.parse(xhr.responseText);
+        if(jd.result==0) {
+          show_msg('Update is successful. Rebooting. Please wait...',10000,'green');
+        } else {
+          show_msg('Update failed.',0,'red');
+        }
+      }
+    };
+    xhr.open('POST', 'update', true);
+    xhr.send(fd);
+  });
+  </script>
+</body>
+

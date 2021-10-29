@@ -1,0 +1,177 @@
+<html>
+<head>
+  <meta name='viewport' content='width=device-width,initial-scale=1'>	
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <link href="https://fonts.googleapis.com/css?family=Geo|Open Sans" rel="stylesheet">
+</head>
+<body>
+	<div id="tester" style="margin: 2%, 0%;"></div>
+	<div id="radioBtnContainer">
+		<button id="backBtn" onclick="window.history.back();">Back</button>
+		<button id="recBtn">Record</button>
+		<button id="tranBtn">Transmit</button>
+		<button id="dlBtn">Data</button>
+	</div>
+	<style type="text/css">
+		body{
+			background-color: #eeeeee;
+			margin: none;
+		}
+		#radioBtnContainer{
+			 margin: 0% 0%;
+		}
+		button{
+			font-family: 'Open Sans';
+			font-size: 1.0rem;
+			border-style: solid;
+			border-width: 0px 0px 1px 0px;
+			border-color: #aaaaaa;
+			outline: none;
+			background-color: white;
+			cursor: pointer;
+		}
+		button:hover:enabled{
+		background-color: #ddd;
+		}
+		#recBtn, #tranBtn{
+			width: 22%;
+			margin: 0% 1%;
+			padding: 0.8rem;
+		}
+		#backBtn, #dlBtn {
+			width: 16%;
+			margin: 0% 1%;
+			padding: 0.8rem;
+		}			
+	</style>
+	<script type="text/javascript">
+		var ip = "/";
+		function id(s) {return document.getElementById(s);}
+		function clas(s) {return document.getElementsByClassName(s);}
+		
+		var sampleInt=0, sampleTime=0;
+		var sampleResult=[], sampleTimeline=[];
+		
+		var transmitBtn = id("tranBtn");
+		var receiveBtn =  id("recBtn");
+		var downloadBtn = id("dlBtn");
+
+		function plotGraph(){
+
+			var trace = {
+			  x: sampleTimeline,
+			  y: sampleResult,
+			  mode: 'lines',
+			  line: {
+			    color: 'rgb(55, 128, 191)',
+			    width: 1
+			  }
+			};
+			var dataPoints = [ trace ];
+
+			var layout = {
+				title:'Radio Signal (Signal Length: '+sampleTime+' second)',
+				xaxis: {
+					title: 'Time ('+sampleInt+'microsecond)'
+				},
+				yaxis: {
+					title: 'Signal'
+				},
+				paper_bgcolor: 'rgba(0,0,0,0)',
+    			plot_bgcolor: 'rgba(0,0,0,0)',
+    			font: { family: "Raleway" }
+			};
+
+			Plotly.newPlot('tester', dataPoints, layout);
+		}
+
+		transmitBtn.onclick = function(){
+			this.disabled = true;
+			this.innerHTML = "Transmiting..";
+			let xhr = new XMLHttpRequest();
+			let url = ip+"hrs?action=transmit";
+			xhr.open("GET", url, true);
+			xhr.onreadystatechange = function(){
+				if (xhr.readyState === 4 && xhr.status === 200) {
+					transmitBtn.disabled = false;
+					transmitBtn.innerHTML = "Transmit";
+				}
+			};
+			xhr.send();
+		};
+
+		receiveBtn.onclick = function(){
+			this.disabled = true;
+			let xhr = new XMLHttpRequest();
+			let url = ip+"hrs?action=scan";
+			xhr.open("GET", url, true);
+			//xhr.timeout = MAX_TIMEOUT;
+			//xhr.ontimeout = timeoutProcedure;
+			xhr.onreadystatechange = function(){
+				if (xhr.readyState === 4 && xhr.status === 200) {
+					receiveBtn.innerHTML = "Scanning..";
+					// should be getting the time to get data
+					let json = JSON.parse(xhr.responseText);
+					sampleTime = json.time;
+					sampleInt = json.interval;
+					setTimeout(fetchData, 1000 * sampleTime * 1.2);
+				}
+			};
+			xhr.send();
+		};
+
+		function fetchData(){
+			receiveBtn.innerHTML = "Fetching Data";
+			let xhr = new XMLHttpRequest();
+			let url = ip+"hrs?action=fetch";
+			xhr.open("GET", url, true);
+			//xhr.timeout = MAX_TIMEOUT;
+			//xhr.ontimeout = timeoutProcedure;
+			xhr.onreadystatechange = function(){
+				if (xhr.readyState === 4 && xhr.status === 200) {
+					receiveBtn.innerHTML = "Processing..";
+					let json = JSON.parse(xhr.responseText);
+					
+					let fileData = '{"time":'+sampleTime+',"interval":'+sampleInt+',"data":"';
+					fileData += json.data.toUpperCase();
+					fileData += '"}';
+
+					var textFile = window.URL.createObjectURL(new Blob([fileData], {type: 'application/json'}));
+					downloadBtn.onclick = function(){ window.open(textFile);}
+					downloadBtn.disabled = false;
+
+					let data = json.data;
+					let result = [];
+					while(data.length != 0){
+						result.push(parseInt(data.substring(0, 2), 16));
+						data = data.substring(2);
+					}
+					var timeline = [];
+					var resultfull = [];
+					var j=0;
+					for (var i = 0; i < result.length; i++) {
+						for(var k=0; k<8; k+=1, j++) {
+							timeline[j] = j;
+							resultfull[j] = (result[i]>>k)&0b1;
+						}
+					}
+					sampleResult = resultfull;
+					sampleTimeline = timeline;
+					plotGraph();
+					receiveBtn.innerHTML = "Record";
+					receiveBtn.disabled = false;
+					
+				}
+			};
+			xhr.send();
+		}
+
+		// replot the graph on window resized
+		window.addEventListener("resize", plotGraph);
+		// draw the empty graph when first loaded the page
+		plotGraph([], [], "");
+		// because there isn't any data to be downloaded
+		downloadBtn.disabled = true;
+
+	</script>
+</body>
