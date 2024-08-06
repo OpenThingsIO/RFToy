@@ -38,6 +38,8 @@
   #define PRINTLN(x) {}
 #endif
 
+#define RFCODE_VERSION_STRING "H"
+
 // ====== PIN DEFINES ======
 #define MAIN_I2CADDR 0x20           // PCF8574 IO Expander I2C address
 #define MAIN_INPUTMASK 0b00001010
@@ -378,7 +380,7 @@ String getHex(unsigned long num,int chars){
 }
 
 String getStationCode(int sid){
-  String s = "";
+  String s = RFCODE_VERSION_STRING;
   StationStruct *stn = &stations[sid];
   s += getHex(stn->on,sizeof(stn->on)*2);
   s += getHex(stn->off,sizeof(stn->on)*2);
