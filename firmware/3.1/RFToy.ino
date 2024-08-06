@@ -57,11 +57,6 @@
 //#define RECEIVE_PIN  14
 #define LED_PIN 2
 
-// For simplicity, assume 24-bit code, protocol 1
-// The RCSwitch library supports more general code 
-#define CODE_LENGTH 24
-#define PROTOCOL 1
-
 // ====== UI States ======
 #define UI_MENU 0
 #define UI_CODE 1
@@ -97,6 +92,8 @@ struct StationStruct {
   uint32_t on;
   uint32_t off;
   uint16_t delay;
+  uint8_t  protocol;
+  uint8_t  bitlength;
   char name[STATION_NAME_SIZE];
   boolean status;
 };
@@ -215,7 +212,7 @@ void eeprom_init(bool force=false) {
 
   char* eptr = (char*)EEPROM.getDataPtr();
   // check signature
-  if(!force && eptr[SIG_ADDR]=='E' && eptr[SIG_ADDR+1]=='S' && eptr[SIG_ADDR+2]=='P') {
+  if(!force && eptr[SIG_ADDR]=='E' && eptr[SIG_ADDR+1]=='S' && eptr[SIG_ADDR+2]=='1') {
     // signature set, read configurations
     PRINTLN(F("EEPROM initialized"));
   } else {
@@ -231,7 +228,7 @@ void eeprom_init(bool force=false) {
     }
     eptr[SIG_ADDR] = 'E';
     eptr[SIG_ADDR+1] = 'S';
-    eptr[SIG_ADDR+2] = 'P';
+    eptr[SIG_ADDR+2] = '1';
     EEPROM.commit();
   }  
 }
@@ -382,9 +379,12 @@ String getHex(unsigned long num,int chars){
 
 String getStationCode(int sid){
   String s = "";
-  s += getHex(stations[sid].on,6);
-  s += getHex(stations[sid].off,6);
-  s += getHex(stations[sid].delay,4);
+  StationStruct *stn = &stations[sid];
+  s += getHex(stn->on,sizeof(stn->on)*2);
+  s += getHex(stn->off,sizeof(stn->on)*2);
+  s += getHex(stn->delay,sizeof(stn->delay)*2);
+  s += getHex(stn->protocol,sizeof(stn->protocol)*2);
+  s += getHex(stn->bitlength,sizeof(stn->bitlength)*2);
   s.toUpperCase();
   return s;
 }
@@ -445,7 +445,7 @@ boolean dummyInstructions() {
 
 // Prompt screen, appear at the beginning
 void promptScreen() {
-  display.drawString(getStrCenterOfs(5), 2, F("RFToy"));
+  display.drawString(getStrCenterOfs(10), 2, F("RFToy v3.1"));
   display.drawString(0, 12, F("https://openthings.io"));
   display.drawString(10, 23, F("Enabled WiFi?"));
   display.drawString(10, 35, F("B1: Yes (default)"));
@@ -505,12 +505,14 @@ void uiDrawStation(){
   display.drawString(getStrCenterOfs(title.length()), 2, title);
   display.setColor(WHITE);
   display.drawString(0,15, F("Click B1/B3: play"));
-  display.drawString(0,27, F("Hold  B1/B3: record"));
-  display.drawString(0,52, F("on    back/del    off"));
+  display.drawString(0,25, F("Hold  B1/B3: record"));
+  display.drawString(0,55, F("on    back/del    off"));
   if(stations[station_selected].on==0 && stations[station_selected].off==0){
-    display.drawString(0,39, "Code:-");
+    display.drawString(0,35, "Code: -");
   } else {
-    display.drawString(0,39,"Code:"+getStationCode(station_selected));
+    String code = getStationCode(station_selected);
+    display.drawString(0,35, "Code: "+code.substring(0, 14));
+    display.drawString(0,45, "      "+code.substring(14));
   }
   display.display();
 }
@@ -586,9 +588,13 @@ void radioRecord(int staNum, boolean on){
         if(on){
           stations[staNum].on = mySwitch.getReceivedValue();
           stations[staNum].delay = mySwitch.getReceivedDelay();
+          stations[staNum].protocol = mySwitch.getReceivedProtocol();
+          stations[staNum].bitlength = mySwitch.getReceivedBitlength();
         } else {
           stations[staNum].off = mySwitch.getReceivedValue();
           stations[staNum].delay = mySwitch.getReceivedDelay();
+          stations[staNum].protocol = mySwitch.getReceivedProtocol();
+          stations[staNum].bitlength = mySwitch.getReceivedBitlength();
         }
         // forces dirty bit to be set to 1
         stations = (StationStruct*)EEPROM.getDataPtr();
@@ -607,15 +613,16 @@ void radioTransmit(int staNum, boolean on){
     digitalWriteExt(TRANSMIT_POWER_PIN,HIGH);
     delay(POWER_PAUSE);
     mySwitch.enableTransmit(TRANSMIT_PIN);
-    mySwitch.setProtocol(PROTOCOL);
-    mySwitch.setPulseLength(stations[staNum].delay*.98);
+    StationStruct *stn = &stations[staNum];
+    mySwitch.setProtocol(stn->protocol);
+    mySwitch.setPulseLength(stn->delay*.98);
     if(on){
-      if(stations[staNum].on != 0){
-        mySwitch.send(stations[staNum].on,CODE_LENGTH);
+      if(stn->on != 0){
+        mySwitch.send(stn->on,stn->bitlength);
       }
     } else {
-      if(stations[staNum].off != 0){
-        mySwitch.send(stations[staNum].off,CODE_LENGTH);
+      if(stn->off != 0){
+        mySwitch.send(stn->off,stn->bitlength);
       }
     }
     mySwitch.disableTransmit();
@@ -768,9 +775,7 @@ void getController(){
     msg += F("\",\"status\":");
     msg += stations[i].status ? 1 : 0;
     msg += F(",\"code\":\"");
-    msg += getHex(stations[i].on, 6);
-    msg += getHex(stations[i].off, 6);
-    msg += getHex(stations[i].delay,4);
+    msg += getStationCode(i);
     msg += "\"}";
     if (i < (STATION_COUNT-1))  msg += ",";
   }
