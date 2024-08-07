@@ -26,7 +26,7 @@
 #include <WiFiManager.h>
 #include <ESP8266WebServer.h>
 
-#include "LibrationFont.h" // Font used on LCD display
+#include "Monospaced10.h" // Font used on LCD display
 #include "htmls.h"
 
 #define DEBUG
@@ -471,7 +471,7 @@ void promptScreen() {
 void uiDrawMenu(){
   uint8_t w, h, ofs;
   display.drawString(getStrCenterOfs(12), 2, F("Station List"));
-  h = 10;
+  h = 9;
   w = 6;
   ofs = 15; // 0-15 pixel is yellow title pixel
   // the first station number on this page
@@ -507,14 +507,14 @@ void uiDrawStation(){
   display.drawString(getStrCenterOfs(title.length()), 2, title);
   display.setColor(WHITE);
   display.drawString(0,15, F("Click B1/B3: play"));
-  display.drawString(0,25, F("Hold  B1/B3: record"));
-  display.drawString(0,55, F("on    back/del    off"));
+  display.drawString(0,24, F("Hold  B1/B3: record"));
+  display.drawString(0,54, F("on    back/del    off"));
   if(stations[station_selected].on==0 && stations[station_selected].off==0){
-    display.drawString(0,35, "Code: -");
+    display.drawString(0,34, "Code: -");
   } else {
     String code = getStationCode(station_selected);
-    display.drawString(0,35, "Code: "+code.substring(0, 14));
-    display.drawString(0,45, "      "+code.substring(14));
+    display.drawString(0,34, "Code: "+code.substring(0, 14));
+    display.drawString(0,44, "      "+code.substring(14));
   }
   display.display();
 }
@@ -961,7 +961,7 @@ void setup() {
   
   display.init();
   display.flipScreenVertically();
-  display.setFont(Liberation_Mono_10);
+  display.setFont(Monospaced_plain_10);
 
   eeprom_init();
   promptScreen();
