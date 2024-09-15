@@ -84,7 +84,8 @@ int station_selected = 0;
 int mode = UI_MENU;
 int old_mode = UI_CODE;
 boolean redraw = false;
-boolean usewifi = true;
+int usewifi = 1;
+boolean hasPsk = false;
 
 // ====== Station data ======
 struct StationStruct {
@@ -417,12 +418,17 @@ void uiCountDown(int timer, boolean (*callback)()=NULL) {
 
 boolean selectWiFi() {
   if (!digitalReadExt(B1)) { // select WiFi
-    usewifi = true;
+    usewifi = 1;
+    delay(250);
+    return true;
+  }
+  if (!hasPsk && !digitalReadExt(B2)) { // select WiFi
+    usewifi = 2;
     delay(250);
     return true;
   }
   if (!digitalReadExt(B3)) {  // select manual
-    usewifi = false;
+    usewifi = 0;
     delay(250);
     return true;
   }
@@ -441,23 +447,44 @@ boolean dummyInstructions() {
 void promptScreen() {
   display.drawString(getStrCenterOfs(5), 2, F("RFToy"));
   display.drawString(0, 12, F("https://openthings.io"));
-  display.drawString(10, 23, F("Enabled WiFi?"));
-  display.drawString(10, 35, F("B1: Yes (default)"));
-  display.drawString(10, 45, F("B3: No"));
+  display.drawString(4, 23, F("Enable WiFi?"));
+  String ssid = WiFi.psk().c_str();
+  hasPsk = ssid != NULL && ssid.length() > 0;
+  if (hasPsk){
+    display.drawString(10, 35, F("B1: Yes"));
+    display.drawString(10, 45, F("B3: No"));
+  } else {
+    display.drawString(4, 35, F("B1:Manual, B2:by WPS"));
+    display.drawString(4, 45, F("B3:No"));    
+  }
   display.display();
 
   uiCountDown(PROMPT_TIMEOUT, selectWiFi);
   display.clear();  
   
-  display.drawString(0, 2,  F("    Instructions    "));
-  display.drawString(0, 13, F(" click / hold button"));
-  display.drawString(0, 23, F("B1: <- / reset all"));
-  display.drawString(0, 33, F("B2: OK / reset WiFi"));
-  display.drawString(0, 43, F("B3: -> / show IP"));
-  display.display();
+  // Bypass second splash screen if user hit B2 earlier
+  if (usewifi < 2){ 
+    display.drawString(0, 2,  F("    Instructions    "));
+    display.drawString(0, 13, F(" click / hold button"));
+    display.drawString(0, 23, F("B1: <- / reset all"));
+    display.drawString(0, 33, F("B2: OK / reset WiFi"));
+    display.drawString(0, 43, F("B3: -> / show IP"));
+    display.display();
 
-  uiCountDown(PROMPT_TIMEOUT, dummyInstructions);
-  display.clear();
+    uiCountDown(PROMPT_TIMEOUT, dummyInstructions);
+    display.clear();
+  }
+}
+
+void wpsFailed() {
+  display.clear(); 
+  display.drawString(getStrCenterOfs(10), 2, F("WPS failed!"));
+  display.drawString(4, 35, F("Reset the device to"));
+  display.drawString(4, 45, F("try again"));
+  display.display();
+  delay(3000); 
+  ESP.reset();
+  delay(1000);
 }
 
 void uiDrawMenu(){
@@ -924,6 +951,18 @@ void configModeCallback (WiFiManager *myWiFiManager) {
   display.display();
 }
 
+// gets called when WiFiManager enters WPS mode
+void wpsModeInitScreen () {
+  //entered config mode, make led toggle faster
+  ticker.attach(0.1, tick);
+  display.clear();
+  display.drawString(getStrCenterOfs(14), 2, F("Configure WiFi"));
+  display.drawString(getStrCenterOfs(12), 14, F("by using WPS"));
+  display.drawString(0, 38, F("Hit WPS button"));
+  display.drawString(0, 50, F("on your router!"));
+  display.display();
+}
+
 void saveConfigCallback () {
   display.clear();
   display.drawString(getStrCenterOfs(14), 2, F("Configure WiFi"));
@@ -955,21 +994,42 @@ void setup() {
 
   redraw = true;
 
-  if(usewifi) {
+  if(usewifi > 0) {
     PRINTLN(F("Start WiFi"));
     //set led pin as output
     // start ticker with 0.5 because we start in AP mode and try to connect
     ticker.attach(1.0, tick);  	
     WiFiManager wifiManager;
-    wifiManager.setAPCallback(configModeCallback);
-    wifiManager.setSaveConfigCallback(saveConfigCallback);
-    //wifiManager.autoConnect("AutoConnectAP");
-    if(!wifiManager.autoConnect()) {
-      PRINTLN(F("failed to connect and hit timeout"));
-      //reset and try again, or maybe put it to deep sleep
-      ESP.reset();
+    if (usewifi == 2) {
+      wpsModeInitScreen();
+      WiFi.mode(WIFI_STA);
       delay(1000);
-    } 
+      bool wpsSuccess = WiFi.beginWPSConfig();
+      if (wpsSuccess){
+        String newSSID = WiFi.SSID();
+        if(newSSID.length() <= 0) {
+          PRINTLN(F("failed to connect and hit timeout"));
+          //reset and try again
+          wpsFailed();
+        } else {
+          PRINTLN(F("Connected by WPS!"));
+          saveConfigCallback();
+        }
+      } else {
+        wpsFailed();
+      }
+      //wifiManager.setAPCallback(wpsModeCallback);
+    } else {
+      wifiManager.setAPCallback(configModeCallback);
+      wifiManager.setSaveConfigCallback(saveConfigCallback);
+      //wifiManager.autoConnect("AutoConnectAP");
+      if(!wifiManager.autoConnect()) {
+        PRINTLN(F("failed to connect and hit timeout"));
+        //reset and try again, or maybe put it to deep sleep
+        ESP.reset();
+        delay(1000);
+      } 
+    }
   	
     ticker.detach();
     set_led(LOW);
